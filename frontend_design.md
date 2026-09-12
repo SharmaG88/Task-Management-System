@@ -36,7 +36,8 @@ Code ko clean rakhne ke liye hum in UI elements ko alag files mein banayenge:
 
 1. **`TaskTile` Widget:** 
    - Har ek task item is widget ka use karega. 
-   - Isme Swipe gestures add karenge (Swipe left to delete, swipe right to done).
+   - Isme Swipe gestures add karenge (Swipe left to delete, swipe right to done). Smooth swipe animations lagayenge.
+   - Task complete hone par ek **checkmark animation** play hogi (`lottie` ya `AnimatedIcon` use karke).
    - *Widgets Used:* `Dismissible`, `Card`, `Checkbox`, `ListTile`.
 2. **`AddTaskBottomSheet` Widget:**
    - Floating Action Button dabane par naya task dalne ka popup.
@@ -70,7 +71,7 @@ lib/
 
 UI directly database se baat nahi karega. Frontend ka flow yeh hoga:
 1. `HomeScreen` build hoga aur `Provider` se tasks ki list magega (`context.watch<TaskProvider>().tasks`).
-2. Agar list empty hai, toh ek **Empty State SVG image** dikhayega (e.g. "Relax, no tasks").
+2. Agar list empty hai, toh ek **Empty State SVG image** dikhayega (e.g. "Relax, no tasks"). Iske liye hum `flutter_svg` package ka use karenge taaki image high quality aur modern dikhe.
 3. Agar tasks hain, toh unhe `TaskTile` mein pass karke render karega.
 4. User kisi task par mark done karta hai, toh `TaskTile` sidha Provider ka function call karega: `context.read<TaskProvider>().markTaskDone(taskId)`.
 
