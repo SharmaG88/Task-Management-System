@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../common/widgets/dashboard_summary.dart';
-import '../common/widgets/task_tile.dart';
 import '../common/widgets/add_task_bottom_sheet.dart';
 import '../common/widgets/empty_state_widget.dart';
+import '../common/widgets/task_list_view.dart';
 import '../common/utils/time_utils.dart';
+import '../services/api_service.dart';
 
 class Homescreen extends StatefulWidget {
   const Homescreen({super.key});
@@ -14,14 +15,58 @@ class Homescreen extends StatefulWidget {
 
 class _HomescreenState extends State<Homescreen> {
   List<Map<String, String>> dummyTasks = [];
+  bool isLoading = true;
 
-  int _findTaskIndex(String id) {
-    return dummyTasks.indexWhere((task) => task['id'] == id);
+  @override
+  void initState() {
+    super.initState();
+    _loadTasksFromDatabase();
+  }
+
+  // ---------------------------------------------------
+  // 1. API & STATE LOGIC (Data manage karne wale functions)
+  // ---------------------------------------------------
+
+  Future<void> _loadTasksFromDatabase() async {
+    setState(() => isLoading = true);
+    final fetchedTasks = await ApiService.fetchTasks();
+    setState(() {
+      dummyTasks = fetchedTasks.map<Map<String, String>>((t) => {
+        'id': t['id'].toString(),
+        'title': t['title'].toString(),
+        'time': t['time'].toString(),
+        'isDone': t['isDone'] ? 'true' : 'false',
+      }).toList();
+      isLoading = false;
+    });
+  }
+
+  int _findTaskIndex(String id) => dummyTasks.indexWhere((task) => task['id'] == id);
+
+  void _changeTaskStatus(String id, bool isDone) async {
+    int index = _findTaskIndex(id);
+    if (index != -1) {
+      setState(() => dummyTasks[index]['isDone'] = isDone ? 'true' : 'false');
+      await ApiService.updateTask(id, dummyTasks[index]['title']!, dummyTasks[index]['time']!, isDone);
+    }
+  }
+
+  void _deleteTask(String id) async {
+    setState(() => dummyTasks.removeWhere((task) => task['id'] == id));
+    await ApiService.deleteTask(id);
+  }
+
+  void _clearCompletedTasks() async {
+    setState(() => isLoading = true);
+    List<Map<String, String>> doneTasks = dummyTasks.where((t) => t['isDone'] == 'true').toList();
+    for (var task in doneTasks) {
+      await ApiService.deleteTask(task['id']!);
+    }
+    await _loadTasksFromDatabase();
   }
 
   void _openAddTaskSheet({String? id}) {
     int index = id != null ? _findTaskIndex(id) : -1;
-    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, 
@@ -29,47 +74,27 @@ class _HomescreenState extends State<Homescreen> {
       builder: (context) {
         return AddTaskBottomSheet(
           initialTask: index != -1 ? dummyTasks[index] : null,
-          onSave: (title, time) {
-            setState(() {
-              if (index != -1) {
-                dummyTasks[index]['title'] = title;
-                dummyTasks[index]['time'] = time;
-              } else {
-                dummyTasks.add({
-                  'id': DateTime.now().millisecondsSinceEpoch.toString(), 
-                  'title': title,
-                  'time': time,
-                  'isDone': 'false',
-                });
-              }
-            });
+          onSave: (title, time) async {
+            setState(() => isLoading = true);
+            if (index != -1) {
+              bool isDone = dummyTasks[index]['isDone'] == 'true';
+              await ApiService.updateTask(dummyTasks[index]['id']!, title, time, isDone);
+            } else {
+              await ApiService.createTask(title, time);
+            }
+            await _loadTasksFromDatabase();
           },
         );
       },
     );
   }
 
-  void _changeTaskStatus(String id, bool isDone) {
-    setState(() {
-      int index = _findTaskIndex(id);
-      if (index != -1) dummyTasks[index]['isDone'] = isDone ? 'true' : 'false';
-    });
-  }
+  // ---------------------------------------------------
+  // 2. HELPER FUNCTIONS (Logic simplify karne ke liye)
+  // ---------------------------------------------------
 
-  void _deleteTask(String id) {
-    setState(() {
-      dummyTasks.removeWhere((task) => task['id'] == id);
-    });
-  }
-
-  void _clearCompletedTasks() {
-    setState(() {
-      dummyTasks.removeWhere((task) => task['isDone'] == 'true');
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  // Tasks ko unke time aur status ke hisaab se 3 list mein baantne ka helper function
+  Map<String, List<Map<String, String>>> _categorizeTasks() {
     List<Map<String, String>> lateTasks = [];
     List<Map<String, String>> pendingTasks = [];
     List<Map<String, String>> doneTasks = [];
@@ -82,6 +107,20 @@ class _HomescreenState extends State<Homescreen> {
         else pendingTasks.add(task);
       }
     }
+    return {'late': lateTasks, 'pending': pendingTasks, 'done': doneTasks};
+  }
+
+  // ---------------------------------------------------
+  // 3. UI BUILDING (Sirf UI dikhana)
+  // ---------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+    // Tasks ko baantna
+    final categorizedTasks = _categorizeTasks();
+    final lateTasks = categorizedTasks['late']!;
+    final pendingTasks = categorizedTasks['pending']!;
+    final doneTasks = categorizedTasks['done']!;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -93,7 +132,7 @@ class _HomescreenState extends State<Homescreen> {
         elevation: 0,
       ),
 
-      floatingActionButton: dummyTasks.isNotEmpty
+      floatingActionButton: !isLoading 
           ? FloatingActionButton(
               onPressed: () => _openAddTaskSheet(),
               backgroundColor: Colors.deepPurple,
@@ -101,80 +140,34 @@ class _HomescreenState extends State<Homescreen> {
             )
           : null,
 
-      body: Column(
-        children: [
-          DashboardSummary(pendingCount: pendingTasks.length, doneCount: doneTasks.length, lateCount: lateTasks.length),
-          
-          Expanded(
-            child: dummyTasks.isEmpty
-                ? EmptyStateWidget(
-                    title: 'Your day is clear!',
-                    subtitle: 'Click below to plan your day.',
-                    icon: Icons.calendar_month_outlined,
-                    actionText: 'Add Task',
-                    onActionPressed: () => _openAddTaskSheet(),
-                  )
-                : _buildTaskList(lateTasks, pendingTasks, doneTasks),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaskList(List<Map<String, String>> lateTasks, List<Map<String, String>> pendingTasks, List<Map<String, String>> doneTasks) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (lateTasks.isNotEmpty) ...[
-          const Text('Late Tasks (Overdue)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-          const Divider(color: Colors.redAccent, thickness: 1),
-          const SizedBox(height: 10),
-          ...lateTasks.map((task) => TaskTile(
-            key: ValueKey(task['id']), task: task, isLast: task == lateTasks.last && pendingTasks.isEmpty && doneTasks.isEmpty,
-            isLate: true, onStatusChange: (isDone) => _changeTaskStatus(task['id']!, isDone),
-            onDelete: () => _deleteTask(task['id']!), onEdit: () => _openAddTaskSheet(id: task['id']),
-          )),
-          const SizedBox(height: 20),
-        ],
-
-        if (pendingTasks.isNotEmpty) ...[
-          if (lateTasks.isNotEmpty) const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Upcoming Tasks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
-              Divider(color: Colors.deepPurple, thickness: 1),
-              SizedBox(height: 10),
-            ],
-          ),
-          ...pendingTasks.map((task) => TaskTile(
-            key: ValueKey(task['id']), task: task, isLast: task == pendingTasks.last && doneTasks.isEmpty, isLate: false,
-            onStatusChange: (isDone) => _changeTaskStatus(task['id']!, isDone),
-            onDelete: () => _deleteTask(task['id']!), onEdit: () => _openAddTaskSheet(id: task['id']),
-          )),
-        ],
-
-        if (doneTasks.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Completed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black54)),
-              TextButton.icon(
-                onPressed: _clearCompletedTasks,
-                icon: const Icon(Icons.delete_sweep, color: Colors.red),
-                label: const Text('Clear', style: TextStyle(color: Colors.red)),
-              )
-            ],
-          ),
-          const Divider(thickness: 1),
-          const SizedBox(height: 10),
-          ...doneTasks.map((task) => TaskTile(
-            key: ValueKey(task['id']), task: task, isLast: task == doneTasks.last, isLate: false,
-            onStatusChange: (isDone) => _changeTaskStatus(task['id']!, isDone),
-            onDelete: () => _deleteTask(task['id']!), onEdit: () => _openAddTaskSheet(id: task['id']),
-          )),
-        ],
-      ],
+      body: isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Colors.deepPurple))
+          : Column(
+              children: [
+                DashboardSummary(pendingCount: pendingTasks.length, doneCount: doneTasks.length, lateCount: lateTasks.length),
+                
+                Expanded(
+                  child: dummyTasks.isEmpty
+                      ? EmptyStateWidget(
+                          title: 'Your day is clear!',
+                          subtitle: 'Click below to plan your day.',
+                          icon: Icons.calendar_month_outlined,
+                          actionText: 'Add Task',
+                          onActionPressed: () => _openAddTaskSheet(),
+                        )
+                      // Pura list UI yahan ek line mein simat gaya!
+                      : TaskListView(
+                          lateTasks: lateTasks,
+                          pendingTasks: pendingTasks,
+                          doneTasks: doneTasks,
+                          onStatusChange: _changeTaskStatus,
+                          onDelete: _deleteTask,
+                          onEdit: (id) => _openAddTaskSheet(id: id),
+                          onClearCompleted: _clearCompletedTasks,
+                        ),
+                ),
+              ],
+            ),
     );
   }
 }
