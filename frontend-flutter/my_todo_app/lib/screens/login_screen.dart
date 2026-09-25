@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
-import '../widgets/custom_text_field.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/social_login_button.dart';
+import '../common/widgets/custom_text_field.dart';
+import '../common/widgets/primary_button.dart';
+import '../common/widgets/social_login_button.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});

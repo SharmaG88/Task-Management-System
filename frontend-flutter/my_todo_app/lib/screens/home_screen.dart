@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../widgets/dashboard_summary.dart';
-import '../widgets/task_tile.dart';
-import '../widgets/add_task_bottom_sheet.dart';
-import '../widgets/empty_state_widget.dart';
+import '../common/widgets/dashboard_summary.dart';
+import '../common/widgets/task_tile.dart';
+import '../common/widgets/add_task_bottom_sheet.dart';
+import '../common/widgets/empty_state_widget.dart';
+import '../common/utils/time_utils.dart';
 
 class Homescreen extends StatefulWidget {
   const Homescreen({super.key});
@@ -16,29 +17,6 @@ class _HomescreenState extends State<Homescreen> {
 
   int _findTaskIndex(String id) {
     return dummyTasks.indexWhere((task) => task['id'] == id);
-  }
-
-  bool _isTaskLate(String timeStr) {
-    try {
-      final now = TimeOfDay.now();
-      String lower = timeStr.toLowerCase();
-      bool isPM = lower.contains('pm');
-      bool isAM = lower.contains('am');
-      
-      String cleanTime = lower.replaceAll('am', '').replaceAll('pm', '').trim();
-      List<String> parts = cleanTime.split(':');
-      int hour = int.parse(parts[0]);
-      int minute = int.parse(parts[1].split(' ')[0]); 
-      
-      if (isPM && hour < 12) hour += 12;
-      if (isAM && hour == 12) hour = 0;
-      
-      if (now.hour > hour) return true;
-      if (now.hour == hour && now.minute > minute) return true;
-      return false;
-    } catch (e) {
-      return false;
-    }
   }
 
   void _openAddTaskSheet({String? id}) {
@@ -100,7 +78,7 @@ class _HomescreenState extends State<Homescreen> {
       if (task['isDone'] == 'true') {
         doneTasks.add(task);
       } else {
-        if (_isTaskLate(task['time']!)) lateTasks.add(task);
+        if (TimeUtils.isTaskLate(task['time']!)) lateTasks.add(task);
         else pendingTasks.add(task);
       }
     }
