@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 class TaskTile extends StatelessWidget {
   final Map<String, String> task;
   final bool isLast;
-  final VoidCallback onToggleDone;
+  final bool isLate; // Late check karne ke liye flag
+  final Function(bool) onStatusChange; 
   final VoidCallback onDelete;
   final VoidCallback onEdit;
 
@@ -11,7 +12,8 @@ class TaskTile extends StatelessWidget {
     super.key,
     required this.task,
     required this.isLast,
-    required this.onToggleDone,
+    this.isLate = false, // By default late nahi hai
+    required this.onStatusChange,
     required this.onDelete,
     required this.onEdit,
   });
@@ -20,15 +22,26 @@ class TaskTile extends StatelessWidget {
   Widget build(BuildContext context) {
     bool isDone = task['isDone'] == 'true';
 
+    // Timeline ka color decide karte hain
+    Color timelineColor = Colors.deepPurple;
+    if (isDone) {
+      timelineColor = Colors.green;
+    } else if (isLate) {
+      timelineColor = Colors.redAccent; // Agar late hai toh Red color
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Left Side: Time
         SizedBox(
-          width: 70, // Thodi width badhayi taaki AM/PM theek se aaye
+          width: 70, 
           child: Text(
             task['time']!, 
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+            style: TextStyle(
+              fontWeight: FontWeight.bold, 
+              color: isLate && !isDone ? Colors.redAccent : Colors.black54 // Late hone par time bhi red hoga
+            ),
             textAlign: TextAlign.right,
           ),
         ),
@@ -40,7 +53,7 @@ class TaskTile extends StatelessWidget {
             Icon(
               isDone ? Icons.check_circle : Icons.circle, 
               size: 16, 
-              color: isDone ? Colors.green : Colors.deepPurple
+              color: timelineColor,
             ),
             if (!isLast) 
               Container(
@@ -52,13 +65,11 @@ class TaskTile extends StatelessWidget {
         ),
         const SizedBox(width: 15),
 
-        // Right Side: Task Card with Swipe Gestures (Dismissible)
+        // Right Side: Task Card
         Expanded(
           child: Dismissible(
-            // Key ek unique ID honi chahiye, humne id use kiya hai
             key: Key(task['id']!), 
             
-            // Background jab user Right swipe kare (Done mark karne ke liye)
             background: Container(
               color: Colors.green,
               alignment: Alignment.centerLeft,
@@ -66,7 +77,6 @@ class TaskTile extends StatelessWidget {
               child: const Icon(Icons.check, color: Colors.white, size: 30),
             ),
             
-            // Background jab user Left swipe kare (Delete karne ke liye)
             secondaryBackground: Container(
               color: Colors.redAccent,
               alignment: Alignment.centerRight,
@@ -74,23 +84,29 @@ class TaskTile extends StatelessWidget {
               child: const Icon(Icons.delete, color: Colors.white, size: 30),
             ),
             
-            // Swipe handle karna
+            confirmDismiss: (direction) async {
+              if (direction == DismissDirection.startToEnd) {
+                onStatusChange(true);
+                return false; 
+              }
+              return true; 
+            },
+
             onDismissed: (direction) {
               if (direction == DismissDirection.endToStart) {
-                // Right to Left swipe kiya = Delete
                 onDelete();
-              } else if (direction == DismissDirection.startToEnd) {
-                // Left to Right swipe kiya = Done (Lekin dismissible element ko wapas laane ke liye hum isko false se true karte hain)
-                // Dismissible UI se gayab ho jata hai, par hum chahte hain wo list mein rahe as 'Done'.
-                // Isliye Swipe to Done theek se tab kaam karega jab hum widget ko dubara render karein.
-                onToggleDone();
               }
             },
             
             child: Card(
-              elevation: isDone ? 0 : 3, 
-              color: isDone ? Colors.grey[200] : Colors.white, 
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: isDone ? 0 : (isLate ? 4 : 3), // Late wale ka shadow thoda zyada
+              color: isDone 
+                  ? Colors.grey[200] 
+                  : (isLate ? Colors.red[50] : Colors.white), // Late hone par halka red background
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: isLate && !isDone ? const BorderSide(color: Colors.redAccent, width: 1) : BorderSide.none, // Red border agar late hai
+              ),
               margin: const EdgeInsets.only(bottom: 20),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -99,7 +115,7 @@ class TaskTile extends StatelessWidget {
                   value: isDone,
                   activeColor: Colors.green,
                   shape: const CircleBorder(),
-                  onChanged: (value) => onToggleDone(),
+                  onChanged: (value) => onStatusChange(value ?? false),
                 ), 
                 
                 title: Text(
@@ -114,7 +130,7 @@ class TaskTile extends StatelessWidget {
                 
                 trailing: IconButton(
                   icon: const Icon(Icons.edit, color: Colors.blueAccent, size: 20),
-                  onPressed: onEdit,
+                  onPressed: onEdit, // Edit dabane par pop-up aayega jahan time update kar sakte hain
                 ),
               ),
             ),
